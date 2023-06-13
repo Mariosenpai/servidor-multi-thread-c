@@ -6,11 +6,13 @@
 #include <pthread.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 // how many decimal digits the algorithm generates per iteration:
 #define DIGITS_PER_ITERATION 14.1816474627254776555
 
-#define NUMERO_THREAD 5
+#define NUMERO_THREAD 2
 #define TEMPOREQ 100
 
 struct Argumentos{
@@ -22,6 +24,7 @@ struct Argumentos{
 pthread_mutex_t mutex;
 int thread_ocupadas[NUMERO_THREAD] = {0};//0 livre, 1 ocupada
 int quantidade_requisicoes = 0;
+char* nomePasta = "requisicoes";
 
 
 char *chudnovsky(unsigned long digits)
@@ -104,21 +107,21 @@ char *chudnovsky(unsigned long digits)
 void* thread_trabalhadoras(void* arg){
 	
 	struct Argumentos *argumento = (struct Argumentos*)arg;
-	int id = argumento->id;
+
 
 	//entra na zona critica
 	pthread_mutex_lock(&mutex);
-	free(argumento);
 	//printf("Entrou na zona critica\n");
 
 	//torno ela ocupada
+	int id = argumento->id;
 	thread_ocupadas[id] = 1;
 	char* pi;
 	int tempoEspera = argumento->tempoEspera;
 	int quantidade_digitos_pi = argumento->quantidadeCasasPi;
 	quantidade_requisicoes++;
 
-	printf("id=%d, temp=%d, qnt_req=%d\n", id,tempoEspera,quantidade_requisicoes);
+	//printf("id=%d, temp=%d, qnt_req=%d\n", id,tempoEspera,quantidade_requisicoes);
 
 	
 	//gerar o numero pi
@@ -128,12 +131,25 @@ void* thread_trabalhadoras(void* arg){
 	char piCompleto[200];
 	sprintf(piCompleto,"%.1s.%s", pi, pi+1);
 	
+
+	//verifica se a pasta existe se não ele criar ela
+	DIR *diretorio = opendir(nomePasta);
+
+	if(diretorio){
+		closedir(diretorio);
+	}else{
+		if(mkdir(nomePasta, 0777) != 0){
+			printf("Falha ao criar a pasta");
+			return NULL;
+		}
+	}
+
 	//tipo da externção
 	char* tipo = ".txt";
 
 	//transforma o id em uma string
 	char id_string[20];
-	sprintf(id_string,"%d", id);
+	sprintf(id_string,"%s/%d", nomePasta, id);
 	
 	char* nome_arquivo_requisicao = strcat(id_string,tipo);
 
@@ -159,6 +175,7 @@ void* thread_trabalhadoras(void* arg){
 	//deixa a thread livre
 	thread_ocupadas[id] = 0;
 	//sair da zone critica
+	free(argumento);
 	pthread_mutex_unlock(&mutex);
 
 	//sched_yield();
@@ -173,8 +190,6 @@ int main(int argc, char **argv)
 	pthread_t t[NUMERO_THREAD];
 	
 	int quantidade_requisicoes;
-
-	void * thread_retorn;
 
 	char* nome_arquivo = "requisicoes.txt";
 
@@ -214,27 +229,33 @@ int main(int argc, char **argv)
 	fclose(arquivo);
 
 	//Ler os arquivos
-	FILE *arquivo_leitura = fopen(nome_arquivo, "r");
+
+	printf("Mostrar o arquivo requisicoes\n");
+	FILE *mostrar_requisicoes = fopen(nome_arquivo, "r");
 
 	if(arquivo == NULL){
 		printf("Erro ao abrir o arquivo");
 		return 1;
 	}
 
-	printf("Criando arquivos com o log das thread...\n");
+	
 	int num_pi, tempo;
 	int id = 0;
 	int y =0;
-	while (fscanf(arquivo_leitura, "%d;%d", &num_pi, &tempo) == 2){
+	while (fscanf(mostrar_requisicoes, "%d;%d", &num_pi, &tempo) == 2){
 		
 
 		printf("id=%d, temp=%d, pi=,%d\n",y, tempo,num_pi);
 		y++;
 
 	}
+	fclose(mostrar_requisicoes);
 
 	printf("\n\n");
 
+
+
+	printf("\nCriando arquivos com o log das thread...\n");
 	FILE *arquivo_leituraa = fopen(nome_arquivo, "r");
 
 	if(arquivo == NULL){
@@ -256,7 +277,7 @@ int main(int argc, char **argv)
 		
 		//verifica se a thread esta ocupada
 		if(thread_ocupadas[id_thread] == 0){
-			if(pthread_create(&t[id_thread], NULL, thread_trabalhadoras, (void*)&argumento) != 0){
+			if(pthread_create(&t[id_thread], NULL, thread_trabalhadoras, argumento) != 0){
 				printf("Falha ao criar a thread\n");
 				return 1;
 			}
@@ -273,7 +294,7 @@ int main(int argc, char **argv)
 				argumento->id = id_thread_prox;
 				//verificas se a proxima thread estar livre
 				if(thread_ocupadas[id_thread_prox]==0){
-					pthread_create(&t[id_thread_prox], NULL, thread_trabalhadoras, &argumento);
+					pthread_create(&t[id_thread_prox], NULL, thread_trabalhadoras, argumento);
 					printf("Inicialização da proxima thread %d \n", id_thread_prox);
 					break;
 				}
@@ -292,12 +313,18 @@ int main(int argc, char **argv)
 
 	printf("\nTerminando as thread restantes...\n");
 	int j;
-	for(j =0; j < NUMERO_THREAD;j++){
+	int termina_thread;
+	
+	//determina o tamanho do loop do join onde espera o terminio das thread
+	if(NUMERO_THREAD > quantidade_requisicoes){
+		termina_thread = quantidade_requisicoes;
+	}else{
+		termina_thread = NUMERO_THREAD;
+	}
 
-		if(pthread_join(t[j],&thread_retorn) != 0){
-			printf("Error ao para a thread\n");
-			return 2;
-		}
+	for(j =0; j < termina_thread;j++){
+
+		pthread_join(t[j],NULL);
 
 		printf("Finalização da thread %d \n", j);
 		
