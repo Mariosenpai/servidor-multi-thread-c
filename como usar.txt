@@ -1,0 +1,13 @@
+//dentro da pasta que foi extraida 
+sudo apt install build-essential
+sudo apt install m4 //para o gmp funcionar
+cd gmp-6.2.1
+cd ./configure
+make
+sudo make install
+
+//para roda o codigo
+
+// o "-lgmp" server para usar a biblioteca gmp quer faz os calculos de pi
+gcc main.c -o main -lgmp 
+./main
