@@ -2,9 +2,10 @@
 sudo apt install build-essential
 sudo apt install m4 //para o gmp funcionar
 cd gmp-6.2.1
-cd ./configure
+./configure
 make
 sudo make install
+cd ..
 
 //para roda o codigo
 
